@@ -14,14 +14,13 @@ jobs:
     steps:
       - name: Ambil kode
         run: git clone --depth 1 https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git .
+      - name: Pasang library email
+        run: npm install imapflow --no-audit --no-fund
       - name: Jalankan digest
-        run: |
-          node -v
-          node digest.js
+        run: node digest.js
         env:
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
