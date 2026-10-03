@@ -1,45 +1,38 @@
-// Ringkasan email harian -> Telegram. Node 20+, tanpa dependency.
+// Ringkasan email harian -> Telegram (versi App Password / IMAP, tanpa OAuth)
+const { ImapFlow } = require('imapflow');
 const E = process.env;
 for (const k of Object.keys(E)) if (typeof E[k] === 'string') E[k] = E[k].trim();
-const chk = (n, f) => console.log(n, 'panjang=' + (E[n] || '').length, 'format_ok=' + f(E[n] || ''));
-chk('GOOGLE_CLIENT_ID', v => v.endsWith('.apps.googleusercontent.com'));
-chk('GOOGLE_CLIENT_SECRET', v => v.startsWith('GOCSPX-'));
-chk('GOOGLE_REFRESH_TOKEN', v => v.startsWith('1//'));
-console.log('CLIENT_ID_AWAL', E.GOOGLE_CLIENT_ID.slice(0, 12));
-console.log('TOKEN_AKHIR', E.GOOGLE_REFRESH_TOKEN.slice(-6));
-console.log('ID_TENGAH', E.GOOGLE_CLIENT_ID.slice(13, 45));
-console.log('SECRET_AKHIR', E.GOOGLE_CLIENT_SECRET.slice(-5));
-const need = ['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GOOGLE_REFRESH_TOKEN','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID'];
+const need = ['GMAIL_USER', 'GMAIL_APP_PASSWORD', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'];
 for (const k of need) if (!E[k]) throw new Error('Env belum diisi: ' + k);
-const LLM = E.LLM || 'gemini'; // 'gemini' (ada free tier) atau 'claude' (berbayar)
+const LLM = E.LLM || 'gemini';
 
-async function gmailToken() {
-  const r = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: E.GOOGLE_CLIENT_ID, client_secret: E.GOOGLE_CLIENT_SECRET, refresh_token: E.GOOGLE_REFRESH_TOKEN, grant_type: 'refresh_token' })
-  });
-  const j = await r.json(); if (!j.access_token) throw new Error('Gagal token Gmail: ' + JSON.stringify(j));
-  return j.access_token;
-}
-
-async function fetchEmails(tok) {
-  const h = { Authorization: 'Bearer ' + tok };
-  const q = encodeURIComponent(E.GMAIL_QUERY || 'is:unread newer_than:1d -category:promotions -category:social');
-  const list = await (await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=30`, { headers: h })).json();
+async function fetchEmails() {
+  const client = new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, logger: false,
+    auth: { user: E.GMAIL_USER, pass: E.GMAIL_APP_PASSWORD.replace(/\s+/g, '') } });
+  await client.connect();
   const out = [];
-  for (const m of list.messages || []) {
-    const d = await (await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`, { headers: h })).json();
-    const g = n => (d.payload?.headers || []).find(x => x.name === n)?.value || '';
-    out.push(`Dari: ${g('From')}\nSubjek: ${g('Subject')}\nCuplikan: ${d.snippet}`);
-  }
+  const lock = await client.getMailboxLock('INBOX');
+  try {
+    let uids;
+    try { uids = await client.search({ gmraw: E.GMAIL_QUERY || 'is:unread newer_than:1d -category:promotions -category:social' }, { uid: true }); }
+    catch { uids = await client.search({ seen: false, since: new Date(Date.now() - 86400000) }, { uid: true }); }
+    uids = (uids || []).slice(-30);
+    if (uids.length) {
+      for await (const m of client.fetch(uids, { envelope: true }, { uid: true })) {
+        const f = m.envelope.from?.[0];
+        out.push(`Dari: ${f?.name || ''} <${f?.address || ''}>\nSubjek: ${m.envelope.subject || '(tanpa subjek)'}`);
+      }
+    }
+  } finally { lock.release(); }
+  await client.logout();
   return out;
 }
 
-const PROMPT = emails => `Kamu asisten pribadi. Dari daftar email berikut, buat ringkasan harian dalam Bahasa Indonesia, teks polos tanpa markdown, dengan format:
+const PROMPT = emails => `Kamu asisten pribadi. Dari daftar email (pengirim dan subjek) berikut, buat ringkasan harian dalam Bahasa Indonesia, teks polos tanpa markdown, dengan format:
 URGENT (perlu dibalas hari ini)
 PENTING (minggu ini)
 BISA DIABAIKAN (satu baris saja)
-Untuk tiap email urgent/penting: pengirim, inti 1 kalimat, dan saran tindakan. Jika tidak ada, tulis "Tidak ada".
+Untuk tiap email urgent/penting: pengirim, inti 1 kalimat, dan saran tindakan. Jika tidak ada, tulis "Tidak ada". Nilai prioritas hanya dari pengirim dan subjek.
 
 ${emails.join('\n---\n')}`;
 
@@ -50,7 +43,7 @@ async function summarize(text) {
       body: JSON.stringify({ model: E.CLAUDE_MODEL || 'claude-haiku-4-5-20251001', max_tokens: 1500, messages: [{ role: 'user', content: text }] }) });
     const j = await r.json(); return j.content?.[0]?.text || JSON.stringify(j);
   }
-  const model = E.GEMINI_MODEL || 'gemini-2.0-flash'; // cek nama model terbaru di Google AI Studio
+  const model = E.GEMINI_MODEL || 'gemini-2.5-flash';
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${E.GEMINI_API_KEY}`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts: [{ text }] }] }) });
@@ -59,14 +52,17 @@ async function summarize(text) {
 
 async function telegram(text) {
   for (let i = 0; i < text.length; i += 3800) {
-    await fetch(`https://api.telegram.org/bot${E.TELEGRAM_BOT_TOKEN}/sendMessage`, { method: 'POST',
+    const r = await fetch(`https://api.telegram.org/bot${E.TELEGRAM_BOT_TOKEN}/sendMessage`, { method: 'POST',
       headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: E.TELEGRAM_CHAT_ID, text: text.slice(i, i + 3800) }) });
+    if (!r.ok) throw new Error('Telegram gagal: ' + (await r.text()));
   }
 }
 
 (async () => {
-  const emails = await fetchEmails(await gmailToken());
+  const emails = await fetchEmails();
+  console.log('Email ditemukan:', emails.length);
   const date = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Jakarta' });
   if (!emails.length) return telegram(`Ringkasan ${date}\n\nTidak ada email baru yang belum dibaca.`);
   await telegram(`Ringkasan ${date} (${emails.length} email)\n\n` + await summarize(PROMPT(emails)));
+  console.log('Terkirim ke Telegram');
 })().catch(async e => { console.error(e); try { await telegram('Digest gagal: ' + e.message); } catch {} process.exit(1); });
