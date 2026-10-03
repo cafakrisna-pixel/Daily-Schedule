@@ -36,6 +36,25 @@ Untuk tiap email urgent/penting: pengirim, inti 1 kalimat, dan saran tindakan. J
 
 ${emails.join('\n---\n')}`;
 
+async function gemini(text) {
+  const models = [...new Set([E.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview'].filter(Boolean))];
+  let last = '';
+  for (const model of models) {
+    for (let i = 0; i < 3; i++) {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${E.GEMINI_API_KEY}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text }] }] }) });
+      const j = await r.json();
+      const t = j.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (t) { console.log('Model dipakai:', model); return t; }
+      last = model + ': ' + JSON.stringify(j).slice(0, 250);
+      if (![503, 429].includes(r.status)) break;
+      await new Promise(s => setTimeout(s, 6000 * (i + 1)));
+    }
+  }
+  throw new Error('Gemini gagal. ' + last);
+}
+
 async function summarize(text) {
   if (LLM === 'claude') {
     const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST',
@@ -43,13 +62,8 @@ async function summarize(text) {
       body: JSON.stringify({ model: E.CLAUDE_MODEL || 'claude-haiku-4-5-20251001', max_tokens: 1500, messages: [{ role: 'user', content: text }] }) });
     const j = await r.json(); return j.content?.[0]?.text || JSON.stringify(j);
   }
-  const model = E.GEMINI_MODEL || 'gemini-3.8-flash';
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${E.GEMINI_API_KEY}`, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text }] }] }) });
-  const j = await r.json(); return j.candidates?.[0]?.content?.parts?.[0]?.text || JSON.stringify(j);
+  return gemini(text);
 }
-
 async function telegram(text) {
   for (let i = 0; i < text.length; i += 3800) {
     const r = await fetch(`https://api.telegram.org/bot${E.TELEGRAM_BOT_TOKEN}/sendMessage`, { method: 'POST',
