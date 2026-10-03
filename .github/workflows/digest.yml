@@ -2,11 +2,12 @@ name: Daily Digest
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * *'    # 07:00 WIB: laporan lengkap
+    - cron: '0 12 * * *'   # 19:00 WIB: hanya mencatat perintah keuangan/tugas
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   run:
@@ -19,6 +20,7 @@ jobs:
       - name: Jalankan digest
         run: node digest.js
         env:
+          SCHEDULE: ${{ github.event.schedule }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -27,3 +29,11 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           LLM: ${{ vars.LLM }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          NEWS_TOPICS: ${{ vars.NEWS_TOPICS }}
+      - name: Simpan data keuangan
+        if: always()
+        run: |
+          git config user.name "digest-bot"
+          git config user.email "digest-bot@users.noreply.github.com"
+          git add state.json
+          git diff --cached --quiet || (git commit -m "update data" && git push)
