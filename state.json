@@ -1,6 +1,14 @@
 {
- "offset": 962411712,
- "tx": [],
+ "offset": 962411713,
+ "tx": [
+  {
+   "d": "2026-10-03",
+   "dir": "in",
+   "a": 1000000,
+   "note": "transfer | keluar 950rb service mobil |",
+   "cat": "transfer"
+  }
+ ],
  "tasks": [],
  "nextTask": 1
 }
