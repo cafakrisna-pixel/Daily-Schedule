@@ -7,6 +7,7 @@ chk('GOOGLE_CLIENT_SECRET', v => v.startsWith('GOCSPX-'));
 chk('GOOGLE_REFRESH_TOKEN', v => v.startsWith('1//'));
 console.log('CLIENT_ID_AWAL', E.GOOGLE_CLIENT_ID.slice(0, 12));
 console.log('TOKEN_AKHIR', E.GOOGLE_REFRESH_TOKEN.slice(-6));
+console.log('ID_TENGAH', E.GOOGLE_CLIENT_ID.slice(13, 45));
 const need = ['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GOOGLE_REFRESH_TOKEN','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID'];
 for (const k of need) if (!E[k]) throw new Error('Env belum diisi: ' + k);
 const LLM = E.LLM || 'gemini'; // 'gemini' (ada free tier) atau 'claude' (berbayar)
