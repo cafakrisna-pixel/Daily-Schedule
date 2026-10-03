@@ -43,7 +43,7 @@ async function summarize(text) {
       body: JSON.stringify({ model: E.CLAUDE_MODEL || 'claude-haiku-4-5-20251001', max_tokens: 1500, messages: [{ role: 'user', content: text }] }) });
     const j = await r.json(); return j.content?.[0]?.text || JSON.stringify(j);
   }
-  const model = E.GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = E.GEMINI_MODEL || 'gemini-3.8-flash';
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${E.GEMINI_API_KEY}`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts: [{ text }] }] }) });
