@@ -2,7 +2,7 @@ name: Daily Digest
 
 on:
   schedule:
-    - cron: '0 0 * * *'    # 07:00 WIB: laporan lengkap
+    - cron: '0 0 * * *'    # 07:00 WIB: laporan lengkap + info grafis
     - cron: '0 12 * * *'   # 19:00 WIB: hanya mencatat perintah keuangan/tugas
   workflow_dispatch:
 
@@ -27,9 +27,12 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           LLM: ${{ vars.LLM }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
-          NEWS_TOPICS: ${{ vars.NEWS_TOPICS }}
+          VAPE_TOPICS: ${{ vars.VAPE_TOPICS }}
+          INFRA_TOPICS: ${{ vars.INFRA_TOPICS }}
+          YT_QUERIES: ${{ vars.YT_QUERIES }}
       - name: Simpan data keuangan
         if: always()
         run: |
